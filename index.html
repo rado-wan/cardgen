@@ -315,14 +315,27 @@
             reader.readAsDataURL(userPhotoInput.files[0]);
         });
 
+        // --- UPDATED TEXT DRAWING FUNCTION ---
         function drawText(cx, cy, radius) {
             ctx.textAlign = 'center';
             const s = canvas.width; 
             let cursorY = cy + radius + (s * 0.06);
 
+            // Calculate safe width for text so it doesn't crop
+            // Since cx is at ~23%, we have about 46% total width before cropping
+            const maxTextWidth = s * 0.44; 
+
             // 1. NAME 
             if(inputs.name.value) {
-                ctx.font = `bold ${s * 0.038}px 'Georgia', 'Times New Roman', serif`; 
+                let fontSize = s * 0.038;
+                ctx.font = `bold ${fontSize}px 'Georgia', 'Times New Roman', serif`;
+                
+                // AUTO-SCALE: Reduce font size if text is too wide
+                while (ctx.measureText(inputs.name.value).width > maxTextWidth && fontSize > 10) {
+                    fontSize -= 1.5;
+                    ctx.font = `bold ${fontSize}px 'Georgia', 'Times New Roman', serif`;
+                }
+
                 ctx.fillStyle = '#1b4d3e'; 
                 ctx.fillText(inputs.name.value, cx, cursorY);
                 cursorY += (s * 0.045); 
@@ -331,19 +344,24 @@
             // 2 & 3. DETAILS
             if (isStudentCheck.checked) {
                 // --- STUDENT MODE ---
-                // Only write "Current Student"
                 ctx.font = `600 ${s * 0.024}px 'Segoe UI', Arial, sans-serif`;
                 ctx.fillStyle = '#444444';
                 ctx.letterSpacing = '1px';
                 ctx.fillText("Current Student", cx, cursorY);
                 cursorY += (s * 0.032);
                 
-                // "DUET" REMOVED
-
             } else {
                 // --- PROFESSIONAL MODE ---
                 if(inputs.occ.value) {
-                    ctx.font = `600 ${s * 0.022}px 'Segoe UI', Arial, sans-serif`;
+                    let occSize = s * 0.022;
+                    ctx.font = `600 ${occSize}px 'Segoe UI', Arial, sans-serif`;
+                    
+                    // Auto-scale occupation
+                    while (ctx.measureText(inputs.occ.value.toUpperCase()).width > maxTextWidth && occSize > 8) {
+                        occSize -= 1;
+                        ctx.font = `600 ${occSize}px 'Segoe UI', Arial, sans-serif`;
+                    }
+
                     ctx.fillStyle = '#444444';
                     ctx.letterSpacing = '1px'; 
                     ctx.fillText(inputs.occ.value.toUpperCase(), cx, cursorY);
@@ -351,7 +369,15 @@
                 }
 
                 if(inputs.org.value) {
-                    ctx.font = `500 ${s * 0.022}px 'Segoe UI', Arial, sans-serif`;
+                    let orgSize = s * 0.022;
+                    ctx.font = `500 ${orgSize}px 'Segoe UI', Arial, sans-serif`;
+
+                    // Auto-scale Organization
+                    while (ctx.measureText(inputs.org.value).width > maxTextWidth && orgSize > 8) {
+                        orgSize -= 1;
+                        ctx.font = `500 ${orgSize}px 'Segoe UI', Arial, sans-serif`;
+                    }
+
                     ctx.fillStyle = '#444444';
                     ctx.fillText(inputs.org.value, cx, cursorY);
                     cursorY += (s * 0.035);
