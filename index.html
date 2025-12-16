@@ -29,6 +29,7 @@
             justify-content: center;
             width: 100%;
             max-width: 1300px;
+            align-items: flex-start;
         }
 
         /* --- Left Side: Inputs --- */
@@ -71,10 +72,7 @@
             cursor: pointer;
         }
 
-        .checkbox-group label {
-            margin-bottom: 0;
-            cursor: pointer;
-        }
+        .checkbox-group label { margin-bottom: 0; cursor: pointer; }
 
         input[type="text"], input[type="file"] {
             width: 100%;
@@ -116,23 +114,10 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
 
-        #downloadBtn {
-            background-color: #B3965A; /* Gold/Bronze */
-            display: none;
-        }
+        #downloadBtn { background-color: #B3965A; display: none; }
         #downloadBtn:hover { background-color: #927a47; }
 
-        .note {
-            font-size: 0.85rem;
-            color: #666;
-            margin-top: 15px;
-            text-align: center;
-            line-height: 1.4;
-            background: #fff8e1;
-            padding: 10px;
-            border-radius: 6px;
-            border: 1px solid #ffe0b2;
-        }
+        .status { margin-top: 15px; color: #666; font-style: italic; font-size: 0.9rem; text-align: center;}
 
         /* --- Right Side: Preview --- */
         .preview-area {
@@ -141,6 +126,8 @@
             flex-direction: column;
             align-items: center;
             min-width: 300px;
+            position: sticky;
+            top: 20px;
         }
 
         canvas {
@@ -148,14 +135,6 @@
             height: auto;
             border-radius: 12px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            cursor: pointer; 
-        }
-
-        .status {
-            margin-top: 15px;
-            color: #666;
-            font-style: italic;
-            font-size: 0.9rem;
         }
     </style>
 </head>
@@ -169,48 +148,35 @@
                 <label>Upload Photo</label>
                 <input type="file" id="userPhoto" accept="image/*">
             </div>
-
             <div class="input-group">
                 <label>Full Name</label>
                 <input type="text" id="userName" placeholder="e.g. Radowan Ahmed">
             </div>
-
             <div class="checkbox-group">
                 <input type="checkbox" id="isStudent">
                 <label for="isStudent">I am a Current Student</label>
             </div>
-
             <div id="professionalFields">
                 <div class="input-group">
-                    <label>Occupation</label>
+                    <label>Occupation/Designation</label>
                     <input type="text" id="userOccupation" placeholder="e.g. Assistant Engineer">
                 </div>
-
                 <div class="input-group">
                     <label>Organization</label>
                     <input type="text" id="userOrg" placeholder="e.g. PGCB">
                 </div>
             </div>
-
             <div class="input-group">
                 <label>Series No.</label>
                 <input type="text" id="userSeries" placeholder="e.g. 22">
             </div>
-
             <button id="generateBtn">Generate Card</button>
             <button id="downloadBtn">Download Image</button>
-            
-            <p id="statusMsg" class="status">System Ready.</p>
-
-            <div class="note" id="manualSaveNote" style="display:none;">
-                <strong>Download not working?</strong><br>
-                Browser security is blocking the file.<br>
-                👉 <b>Right-Click</b> the large image on the right and select <b>"Save image as..."</b>
-            </div>
+            <p id="statusMsg" class="status">Upload photo and click Generate to start.</p>
         </div>
 
         <div class="preview-area">
-            <canvas id="posterCanvas" title="Right-Click to Save Image"></canvas>
+            <canvas id="posterCanvas"></canvas>
         </div>
     </div>
 
@@ -220,9 +186,7 @@
         const generateBtn = document.getElementById('generateBtn');
         const downloadBtn = document.getElementById('downloadBtn');
         const statusMsg = document.getElementById('statusMsg');
-        const manualSaveNote = document.getElementById('manualSaveNote');
 
-        // Inputs
         const userPhotoInput = document.getElementById('userPhoto');
         const isStudentCheck = document.getElementById('isStudent');
         const profFields = document.getElementById('professionalFields');
@@ -234,184 +198,167 @@
             series: document.getElementById('userSeries')
         };
 
-        // Toggle Professional Fields based on Checkbox
+        // --- COORDINATES CONFIGURATION ---
+        // These values are taken directly from your calibration data
+        const COORDS = {
+            student: {
+                photo: { x: 0.500, y: 0.450, r: 0.120 },
+                name:  { y: 0.670, s: 0.040 },
+                job:   { y: 0.710, s: 0.028 }, // "Current Student"
+                org:   { y: 0.730, s: 0.019 }, // Student Org (if any)
+                series:{ y: 0.750, s: 0.024 }
+            },
+            professional: {
+                photo: { x: 0.500, y: 0.450, r: 0.120 },
+                name:  { y: 0.670, s: 0.040 },
+                job:   { y: 0.700, s: 0.025 }, // Designation
+                org:   { y: 0.730, s: 0.021 }, // Organization
+                series:{ y: 0.770, s: 0.022 }
+            }
+        };
+
+        let cachedUserImg = null;
+        let baseImage = new Image();
+        
+        // Colors
+        const COLOR_GOLD_LUXURY = '#D4AF37'; // Luxurious Gold for Name
+        const COLOR_WHITE_CLEAN = '#FFFFFF'; // White for other info
+        const FONT_FAMILY = `'Georgia', 'Times New Roman', serif`;
+
+        // Toggle Fields and Background
         isStudentCheck.addEventListener('change', function() {
             if(this.checked) {
                 profFields.classList.add('hidden');
+                loadBaseImage('template1.jpg'); 
             } else {
                 profFields.classList.remove('hidden');
+                loadBaseImage('template2.jpg'); 
             }
         });
 
-        let baseImage = new Image();
-        baseImage.src = 'poster.png'; 
-
-        // --- COORDINATES ---
-        const POS = { x: 0.232, y: 0.443, r: 0.153 };
-
-        baseImage.onload = function() {
-            canvas.width = baseImage.width;
-            canvas.height = baseImage.height;
-            drawBase();
-        };
-
-        baseImage.onerror = function() {
-            statusMsg.innerText = "Error: poster.png not found.";
-            statusMsg.style.color = "red";
+        function loadBaseImage(src) {
+            baseImage.src = src;
+            baseImage.onload = function() {
+                canvas.width = baseImage.width;
+                canvas.height = baseImage.height;
+                if(cachedUserImg) redrawCanvas(); 
+                else ctx.drawImage(baseImage, 0, 0);
+            };
+            baseImage.onerror = () => { statusMsg.innerText = "Error loading " + src; };
         }
 
-        function drawBase() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(baseImage, 0, 0);
-        }
+        // Initial Load
+        loadBaseImage('placeholder.png'); 
 
         generateBtn.addEventListener('click', () => {
-            if (!userPhotoInput.files[0]) {
-                alert("Please upload a photo.");
-                return;
-            }
-
+            if (!userPhotoInput.files[0]) { alert("Please upload a photo."); return; }
             statusMsg.innerText = "Processing...";
 
             const reader = new FileReader();
             reader.onload = function(e) {
-                const userImg = new Image();
-                userImg.onload = function() {
-                    // 1. Reset
-                    drawBase();
-
-                    const CX = canvas.width * POS.x;
-                    const CY = canvas.height * POS.y;
-                    const R = canvas.width * POS.r;
-
-                    // 2. Draw Photo
-                    ctx.save();
-                    ctx.beginPath();
-                    ctx.arc(CX, CY, R, 0, Math.PI * 2, true);
-                    ctx.closePath();
-                    ctx.clip();
-
-                    const aspect = userImg.width / userImg.height;
-                    let rw, rh, ox, oy;
-                    if (aspect > 1) {
-                        rh = R * 2; rw = rh * aspect;
-                        ox = CX - R - (rw - R*2)/2; oy = CY - R;
+                cachedUserImg = new Image();
+                cachedUserImg.onload = function() {
+                    const templateStr = isStudentCheck.checked ? 'template1.jpg' : 'template2.jpg';
+                    if(!baseImage.src.includes(templateStr)){
+                         loadBaseImage(templateStr); // Will redraw automatically on load
                     } else {
-                        rw = R * 2; rh = rw / aspect;
-                        ox = CX - R; oy = CY - R - (rh - R*2)/2;
+                         redrawCanvas();
                     }
-                    ctx.drawImage(userImg, ox, oy, rw, rh);
-                    ctx.restore();
-
-                    // 3. Draw Text
-                    drawText(CX, CY, R);
-
                     downloadBtn.style.display = 'block';
-                    manualSaveNote.style.display = 'block'; 
-                    statusMsg.innerText = "Card Generated!";
+                    statusMsg.innerText = "Card Generated Successfully!";
                 };
-                userImg.src = e.target.result;
+                cachedUserImg.src = e.target.result;
             };
             reader.readAsDataURL(userPhotoInput.files[0]);
         });
 
-        // --- UPDATED TEXT DRAWING FUNCTION ---
-        function drawText(cx, cy, radius) {
-            ctx.textAlign = 'center';
-            const s = canvas.width; 
-            let cursorY = cy + radius + (s * 0.06);
+        function redrawCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(baseImage, 0, 0);
 
-            // Calculate safe width for text so it doesn't crop
-            // Since cx is at ~23%, we have about 46% total width before cropping
-            const maxTextWidth = s * 0.44; 
+            const mode = isStudentCheck.checked ? 'student' : 'professional';
+            const cfg = COORDS[mode];
+            const W = canvas.width;
+            const H = canvas.height;
 
-            // 1. NAME 
-            if(inputs.name.value) {
-                let fontSize = s * 0.038;
-                ctx.font = `bold ${fontSize}px 'Georgia', 'Times New Roman', serif`;
-                
-                // AUTO-SCALE: Reduce font size if text is too wide
-                while (ctx.measureText(inputs.name.value).width > maxTextWidth && fontSize > 10) {
-                    fontSize -= 1.5;
-                    ctx.font = `bold ${fontSize}px 'Georgia', 'Times New Roman', serif`;
-                }
+            // --- 1. DRAW PHOTO ---
+            const CX = W * cfg.photo.x;
+            const CY = H * cfg.photo.y;
+            const R = W * cfg.photo.r;
 
-                ctx.fillStyle = '#1b4d3e'; 
-                ctx.fillText(inputs.name.value, cx, cursorY);
-                cursorY += (s * 0.045); 
-            }
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(CX, CY, R, 0, Math.PI * 2, true);
+            ctx.closePath();
+            ctx.clip();
 
-            // 2 & 3. DETAILS
-            if (isStudentCheck.checked) {
-                // --- STUDENT MODE ---
-                ctx.font = `600 ${s * 0.024}px 'Segoe UI', Arial, sans-serif`;
-                ctx.fillStyle = '#444444';
-                ctx.letterSpacing = '1px';
-                ctx.fillText("Current Student", cx, cursorY);
-                cursorY += (s * 0.032);
-                
+            const aspect = cachedUserImg.width / cachedUserImg.height;
+            let rw, rh, ox, oy;
+            if (aspect > 1) {
+                rh = R * 2; rw = rh * aspect;
+                ox = CX - R - (rw - R*2)/2; oy = CY - R;
             } else {
-                // --- PROFESSIONAL MODE ---
+                rw = R * 2; rh = rw / aspect;
+                ox = CX - R; oy = CY - R - (rh - R*2)/2;
+            }
+            ctx.drawImage(cachedUserImg, ox, oy, rw, rh);
+            ctx.restore();
+
+            // --- 2. DRAW TEXT ---
+            ctx.textAlign = 'center';
+            
+            // NAME (Luxurious Gold)
+            if(inputs.name.value) {
+                ctx.fillStyle = COLOR_GOLD_LUXURY;
+                ctx.font = `bold ${W * cfg.name.s}px ${FONT_FAMILY}`;
+                ctx.fillText(inputs.name.value, CX, H * cfg.name.y);
+            }
+
+            // DETAILS (Clean White)
+            ctx.fillStyle = COLOR_WHITE_CLEAN;
+
+            if (mode === 'student') {
+                // Student Mode Text
+                ctx.font = `${W * cfg.job.s}px ${FONT_FAMILY}`;
+                ctx.fillText("Current Student", CX, H * cfg.job.y);
+                
+                // Optional: You can hardcode your University name here if needed
+                // ctx.font = `${W * cfg.org.s}px ${FONT_FAMILY}`;
+                // ctx.fillText("DUET, Gazipur", CX, H * cfg.org.y);
+
+            } else {
+                // Professional Mode Text
                 if(inputs.occ.value) {
-                    let occSize = s * 0.022;
-                    ctx.font = `600 ${occSize}px 'Segoe UI', Arial, sans-serif`;
-                    
-                    // Auto-scale occupation
-                    while (ctx.measureText(inputs.occ.value.toUpperCase()).width > maxTextWidth && occSize > 8) {
-                        occSize -= 1;
-                        ctx.font = `600 ${occSize}px 'Segoe UI', Arial, sans-serif`;
-                    }
-
-                    ctx.fillStyle = '#444444';
-                    ctx.letterSpacing = '1px'; 
-                    ctx.fillText(inputs.occ.value.toUpperCase(), cx, cursorY);
-                    cursorY += (s * 0.030); 
+                    ctx.font = `${W * cfg.job.s}px ${FONT_FAMILY}`;
+                    ctx.fillText(inputs.occ.value, CX, H * cfg.job.y);
                 }
-
                 if(inputs.org.value) {
-                    let orgSize = s * 0.022;
-                    ctx.font = `500 ${orgSize}px 'Segoe UI', Arial, sans-serif`;
-
-                    // Auto-scale Organization
-                    while (ctx.measureText(inputs.org.value).width > maxTextWidth && orgSize > 8) {
-                        orgSize -= 1;
-                        ctx.font = `500 ${orgSize}px 'Segoe UI', Arial, sans-serif`;
-                    }
-
-                    ctx.fillStyle = '#444444';
-                    ctx.fillText(inputs.org.value, cx, cursorY);
-                    cursorY += (s * 0.035);
+                    ctx.font = `${W * cfg.org.s}px ${FONT_FAMILY}`;
+                    ctx.fillText(inputs.org.value, CX, H * cfg.org.y);
                 }
             }
 
-            // 4. SERIES
+            // SERIES (White)
             if(inputs.series.value) {
                 let text = inputs.series.value;
                 if (!text.toLowerCase().includes('series')) {
                     text = "Series: " + text;
                 }
-                ctx.font = `italic 600 ${s * 0.024}px 'Georgia', serif`;
-                ctx.fillStyle = '#B3965A'; 
-                ctx.fillText(text, cx, cursorY);
+                ctx.font = `italic bold ${W * cfg.series.s}px ${FONT_FAMILY}`;
+                ctx.fillText(text, CX, H * cfg.series.y);
             }
         }
 
         downloadBtn.addEventListener('click', function() {
-            try {
-                const dataUrl = canvas.toDataURL('image/png');
-                const link = document.createElement('a');
-                let fileName = 'Reunion_Card.png';
-                if(inputs.name.value) {
-                    fileName = `Reunion_${inputs.name.value.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`;
-                }
-                link.download = fileName;
-                link.href = dataUrl;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            } catch (e) {
-                alert("Browser Security Blocked the Download.\n\nDon't worry! Just RIGHT-CLICK the image on the right side and select 'Save Image As'.");
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+            const link = document.createElement('a');
+            let fileName = 'Reunion_Card.jpg';
+            if(inputs.name.value) {
+                fileName = `Reunion_${inputs.name.value.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.jpg`;
             }
+            link.download = fileName;
+            link.href = dataUrl;
+            link.click();
         });
     </script>
 </body>
